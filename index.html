@@ -358,7 +358,8 @@ body {
   z-index: 50;
   display: none;
   overflow: hidden;
-  transform: translate(15px, -115px); /* default offset to top-right of cursor */
+  left: 0;
+  top: 0;
 }
 
 .loupe.visible { display: block; }
@@ -1973,11 +1974,21 @@ body {
     loupeInfo.textContent = hex;
 
     const wrapperRect = imageWrapper.getBoundingClientRect();
-    let left = clientX - wrapperRect.left + 15;
-    let top = clientY - wrapperRect.top - 125;
+    const loupeW = 104;
+    const loupeH = 125; // canvas + info bar height
+    const gap = 12;
+
+    let left = clientX - wrapperRect.left + gap;
+    let top = clientY - wrapperRect.top - loupeH - gap;
     
-    if (left + 104 > wrapperRect.width) left = clientX - wrapperRect.left - 104 - 15;
-    if (top < 0) top = clientY - wrapperRect.top + 15;
+    // Flip horizontally if it overflows the right edge
+    if (left + loupeW > wrapperRect.width) {
+      left = clientX - wrapperRect.left - loupeW - gap;
+    }
+    // Flip vertically if it overflows the top edge
+    if (top < 0) {
+      top = clientY - wrapperRect.top + gap;
+    }
 
     loupe.style.transform = `translate(${left}px, ${top}px)`;
     loupe.classList.add('visible');
