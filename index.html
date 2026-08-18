@@ -178,6 +178,7 @@ body {
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   min-height: 0;
+  max-height: calc(100vh - 53px);
   position: relative;
 }
 
@@ -346,6 +347,42 @@ body {
 
 .pick-marker.visible { display: block; }
 
+.loupe {
+  position: absolute;
+  width: 104px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+  overflow: hidden;
+  transform: translate(15px, -115px); /* default offset to top-right of cursor */
+}
+
+.loupe.visible { display: block; }
+
+.loupe canvas {
+  display: block;
+  width: 100px;
+  height: 100px;
+  margin: 2px;
+  border-radius: 6px 6px 0 0;
+  background: #000;
+  image-rendering: pixelated;
+}
+
+.loupe-info {
+  background: var(--bg-elevated);
+  color: #fff;
+  font-size: 10px;
+  font-family: 'Consolas', 'SF Mono', monospace;
+  text-align: center;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .image-status-bar {
   display: flex;
   align-items: center;
@@ -493,6 +530,54 @@ body {
   font-family: 'Consolas', 'SF Mono', 'Fira Code', monospace;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.color-input-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.color-input-group span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.color-input {
+  width: 42px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-align: center;
+  transition: var(--transition);
+}
+
+.color-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Remove arrows from number input */
+.color-input::-webkit-outer-spin-button,
+.color-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.color-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+#input-hex {
+  width: 65px;
 }
 
 .copy-btn {
@@ -908,6 +993,10 @@ body {
         <div class="image-wrapper" id="image-wrapper">
           <img id="display-img" alt="読み込んだ画像">
           <div class="pick-marker" id="pick-marker"></div>
+          <div class="loupe" id="loupe">
+            <canvas id="loupe-canvas" width="100" height="100"></canvas>
+            <div class="loupe-info" id="loupe-info">#FFFFFF</div>
+          </div>
           <div class="quiz-overlay-msg" id="quiz-overlay-msg"></div>
         </div>
         <div class="image-status-bar" id="image-status-bar">
@@ -1146,6 +1235,76 @@ body {
     };
   }
 
+  function hexToRgb(hex) {
+    hex = hex.replace(/^#/, '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const num = parseInt(hex, 16);
+    return { r: num >> 16, g: (num >> 8) & 255, b: num & 255 };
+  }
+
+  function cmykToRgb(c, m, y, k) {
+    c /= 100; m /= 100; y /= 100; k /= 100;
+    const r = 255 * (1 - c) * (1 - k);
+    const g = 255 * (1 - m) * (1 - k);
+    const b = 255 * (1 - y) * (1 - k);
+    return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+  }
+
+  function hslToRgb(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    let r, g, b;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+  }
+
+  function labToRgb(l, a, b) {
+    let y = (l + 16) / 116;
+    let x = a / 500 + y;
+    let z = y - b / 200;
+
+    const y3 = Math.pow(y, 3);
+    const x3 = Math.pow(x, 3);
+    const z3 = Math.pow(z, 3);
+
+    y = y3 > 0.008856 ? y3 : (y - 16 / 116) / 7.787;
+    x = x3 > 0.008856 ? x3 : (x - 16 / 116) / 7.787;
+    z = z3 > 0.008856 ? z3 : (z - 16 / 116) / 7.787;
+
+    x *= 0.95047;
+    y *= 1.00000;
+    z *= 1.08883;
+
+    let r = x *  3.2404542 - y * 1.5371385 - z * 0.4985314;
+    let g = -x * 0.9692660 + y * 1.8760108 + z * 0.0415560;
+    let bl = x *  0.0556434 - y * 0.2040259 + z * 1.0572252;
+
+    r = r > 0.0031308 ? 1.055 * Math.pow(r, 1 / 2.4) - 0.055 : 12.92 * r;
+    g = g > 0.0031308 ? 1.055 * Math.pow(g, 1 / 2.4) - 0.055 : 12.92 * g;
+    bl = bl > 0.0031308 ? 1.055 * Math.pow(bl, 1 / 2.4) - 0.055 : 12.92 * bl;
+
+    return {
+      r: Math.max(0, Math.min(255, Math.round(r * 255))),
+      g: Math.max(0, Math.min(255, Math.round(g * 255))),
+      b: Math.max(0, Math.min(255, Math.round(bl * 255)))
+    };
+  }
+
   function deltaE76(lab1, lab2) {
     return Math.sqrt(
       (lab1.l - lab2.l) ** 2 +
@@ -1220,6 +1379,12 @@ body {
   const statusHex = $('status-hex');
   const statusSwatch = $('status-swatch');
   const quizOverlayMsg = $('quiz-overlay-msg');
+  
+  // Loupe
+  const loupe = $('loupe');
+  const loupeCanvas = $('loupe-canvas');
+  const loupeCtx = loupeCanvas ? loupeCanvas.getContext('2d', { willReadFrequently: true }) : null;
+  const loupeInfo = $('loupe-info');
 
   // Picker
   const pickerCanvas = $('picker-canvas');
@@ -1387,12 +1552,12 @@ body {
      ────────────────────────────────────────────────────────────── */
 
   const colorRows = [
-    { id: 'hex',  label: 'HEX' },
-    { id: 'rgb',  label: 'RGB' },
-    { id: 'cmyk', label: 'CMYK' },
-    { id: 'hsv',  label: 'HSV' },
-    { id: 'hsl',  label: 'HSL' },
-    { id: 'lab',  label: 'L*a*b*' },
+    { id: 'hex',  label: 'HEX', html: '<input type="text" class="color-input" id="input-hex" spellcheck="false">' },
+    { id: 'rgb',  label: 'RGB', html: '<div class="color-input-group"><span>R:</span><input type="number" class="color-input" id="input-r" min="0" max="255"></div><div class="color-input-group"><span>G:</span><input type="number" class="color-input" id="input-g" min="0" max="255"></div><div class="color-input-group"><span>B:</span><input type="number" class="color-input" id="input-b" min="0" max="255"></div>' },
+    { id: 'cmyk', label: 'CMYK', html: '<div class="color-input-group"><span>C:</span><input type="number" class="color-input" id="input-c" min="0" max="100"></div><div class="color-input-group"><span>M:</span><input type="number" class="color-input" id="input-m" min="0" max="100"></div><div class="color-input-group"><span>Y:</span><input type="number" class="color-input" id="input-y" min="0" max="100"></div><div class="color-input-group"><span>K:</span><input type="number" class="color-input" id="input-k" min="0" max="100"></div>' },
+    { id: 'hsv',  label: 'HSV', html: '<div class="color-input-group"><span>H:</span><input type="number" class="color-input" id="input-hsv-h" min="0" max="360"></div><div class="color-input-group"><span>S:</span><input type="number" class="color-input" id="input-hsv-s" min="0" max="100"></div><div class="color-input-group"><span>V:</span><input type="number" class="color-input" id="input-hsv-v" min="0" max="100"></div>' },
+    { id: 'hsl',  label: 'HSL', html: '<div class="color-input-group"><span>H:</span><input type="number" class="color-input" id="input-hsl-h" min="0" max="360"></div><div class="color-input-group"><span>S:</span><input type="number" class="color-input" id="input-hsl-s" min="0" max="100"></div><div class="color-input-group"><span>L:</span><input type="number" class="color-input" id="input-hsl-l" min="0" max="100"></div>' },
+    { id: 'lab',  label: 'L*a*b*', html: '<div class="color-input-group"><span>L:</span><input type="number" class="color-input" id="input-lab-l" min="0" max="100"></div><div class="color-input-group"><span>a:</span><input type="number" class="color-input" id="input-lab-a" min="-128" max="127"></div><div class="color-input-group"><span>b:</span><input type="number" class="color-input" id="input-lab-b" min="-128" max="127"></div>' },
   ];
 
   function buildColorValuesUI() {
@@ -1402,7 +1567,7 @@ body {
       div.className = 'color-row';
       div.innerHTML = `
         <span class="color-label">${row.label}</span>
-        <span class="color-value" id="val-${row.id}">-</span>
+        <span class="color-value" id="val-${row.id}">${row.html}</span>
         <button class="copy-btn" data-copy-id="${row.id}" title="コピー">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2"/>
@@ -1413,13 +1578,74 @@ body {
       `;
       colorValuesContainer.appendChild(div);
     });
+
+    $('input-hex').addEventListener('change', () => onInputChange('hex'));
+    ['r','g','b'].forEach(c => $(`input-${c}`).addEventListener('input', () => onInputChange('rgb')));
+    ['c','m','y','k'].forEach(c => $(`input-${c}`).addEventListener('input', () => onInputChange('cmyk')));
+    ['h','s','v'].forEach(c => $(`input-hsv-${c}`).addEventListener('input', () => onInputChange('hsv')));
+    ['h','s','l'].forEach(c => $(`input-hsl-${c}`).addEventListener('input', () => onInputChange('hsl')));
+    ['l','a','b'].forEach(c => $(`input-lab-${c}`).addEventListener('input', () => onInputChange('lab')));
+  }
+
+  function onInputChange(source) {
+    let rgb = null;
+    try {
+      if (source === 'hex') {
+        rgb = hexToRgb($('input-hex').value);
+      } else if (source === 'rgb') {
+        rgb = {
+          r: parseInt($('input-r').value) || 0,
+          g: parseInt($('input-g').value) || 0,
+          b: parseInt($('input-b').value) || 0
+        };
+      } else if (source === 'cmyk') {
+        rgb = cmykToRgb(
+          parseInt($('input-c').value) || 0,
+          parseInt($('input-m').value) || 0,
+          parseInt($('input-y').value) || 0,
+          parseInt($('input-k').value) || 0
+        );
+      } else if (source === 'hsv') {
+        const rgbArr = hsvToRgb(
+          parseInt($('input-hsv-h').value) || 0,
+          (parseInt($('input-hsv-s').value) || 0) / 100,
+          (parseInt($('input-hsv-v').value) || 0) / 100
+        );
+        rgb = { r: rgbArr[0], g: rgbArr[1], b: rgbArr[2] };
+      } else if (source === 'hsl') {
+        rgb = hslToRgb(
+          parseInt($('input-hsl-h').value) || 0,
+          parseInt($('input-hsl-s').value) || 0,
+          parseInt($('input-hsl-l').value) || 0
+        );
+      } else if (source === 'lab') {
+        rgb = labToRgb(
+          parseInt($('input-lab-l').value) || 0,
+          parseInt($('input-lab-a').value) || 0,
+          parseInt($('input-lab-b').value) || 0
+        );
+      }
+    } catch(e) {}
+
+    if (rgb) {
+      rgb.r = Math.max(0, Math.min(255, rgb.r));
+      rgb.g = Math.max(0, Math.min(255, rgb.g));
+      rgb.b = Math.max(0, Math.min(255, rgb.b));
+      
+      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+      state.hue = hsv.h;
+      state.saturation = hsv.s;
+      state.value = hsv.v;
+      renderPicker();
+      updateColorDisplay(source);
+    }
   }
 
   function getCurrentRgb() {
     return hsvToRgb(state.hue, state.saturation, state.value);
   }
 
-  function updateColorDisplay() {
+  function updateColorDisplay(excludeSource = null) {
     const [r, g, b] = getCurrentRgb();
     const hex = rgbToHex(r, g, b);
     const hsv = rgbToHsv(r, g, b);
@@ -1427,15 +1653,34 @@ body {
     const cmyk = rgbToCmyk(r, g, b);
     const lab = rgbToLab(r, g, b);
 
-    // Display values (human-readable)
-    $('val-hex').textContent = hex;
-    $('val-rgb').textContent = `R:${r}  G:${g}  B:${b}`;
-    $('val-cmyk').textContent = `C:${cmyk.c}  M:${cmyk.m}  Y:${cmyk.y}  K:${cmyk.k}`;
-    $('val-hsv').textContent = `H:${Math.round(hsv.h)}°  S:${Math.round(hsv.s * 100)}%  V:${Math.round(hsv.v * 100)}%`;
-    $('val-hsl').textContent = `H:${hsl.h}°  S:${hsl.s}%  L:${hsl.l}%`;
-    $('val-lab').textContent = `L:${Math.round(lab.l)}  a:${Math.round(lab.a)}  b:${Math.round(lab.b)}`;
+    if (excludeSource !== 'hex') $('input-hex').value = hex;
+    if (excludeSource !== 'rgb') {
+      $('input-r').value = r;
+      $('input-g').value = g;
+      $('input-b').value = b;
+    }
+    if (excludeSource !== 'cmyk') {
+      $('input-c').value = cmyk.c;
+      $('input-m').value = cmyk.m;
+      $('input-y').value = cmyk.y;
+      $('input-k').value = cmyk.k;
+    }
+    if (excludeSource !== 'hsv') {
+      $('input-hsv-h').value = Math.round(hsv.h);
+      $('input-hsv-s').value = Math.round(hsv.s * 100);
+      $('input-hsv-v').value = Math.round(hsv.v * 100);
+    }
+    if (excludeSource !== 'hsl') {
+      $('input-hsl-h').value = hsl.h;
+      $('input-hsl-s').value = hsl.s;
+      $('input-hsl-l').value = hsl.l;
+    }
+    if (excludeSource !== 'lab') {
+      $('input-lab-l').value = Math.round(lab.l);
+      $('input-lab-a').value = Math.round(lab.a);
+      $('input-lab-b').value = Math.round(lab.b);
+    }
 
-    // Update swatch
     currentSwatch.style.backgroundColor = hex;
   }
 
@@ -1546,7 +1791,23 @@ body {
     const x = Math.floor(Math.random() * w);
     const y = Math.floor(Math.random() * h);
     const pixel = sourceCtx.getImageData(x, y, 1, 1).data;
-    return { r: pixel[0], g: pixel[1], b: pixel[2] };
+    return { r: pixel[0], g: pixel[1], b: pixel[2], imgX: x, imgY: y };
+  }
+
+  function imageToClientCoords(imgX, imgY) {
+    const info = getImageRenderRect();
+    if (!info) return null;
+
+    const scaleX = info.renderW / sourceCanvas.width;
+    const scaleY = info.renderH / sourceCanvas.height;
+
+    const relX = imgX * scaleX;
+    const relY = imgY * scaleY;
+
+    return {
+      clientX: info.boxLeft + info.offsetX + relX,
+      clientY: info.boxTop + info.offsetY + relY
+    };
   }
 
   function showPickMarker(clientX, clientY) {
@@ -1648,19 +1909,78 @@ body {
     if (!color) return;
 
     if (state.appMode === 'picker') {
-      // Picker mode: update picker to matched color
       setPickerFromRgb(color.r, color.g, color.b);
       showPickMarker(e.clientX, e.clientY);
     } else if (state.appMode === 'quiz') {
       if (state.quizPhase === 'picking') {
-        // Mode B: set target color
-        state.targetColor = { r: color.r, g: color.g, b: color.b };
+        state.targetColor = { r: color.r, g: color.g, b: color.b, imgX: color.imgX, imgY: color.imgY };
         showPickMarker(e.clientX, e.clientY);
         showOverlayMsg('ターゲット設定完了！');
         transitionQuizPhase('guessing');
+      } else if (state.quizPhase === 'guessing' && state.quizMode === 'B') {
+        state.targetColor = { r: color.r, g: color.g, b: color.b, imgX: color.imgX, imgY: color.imgY };
+        showPickMarker(e.clientX, e.clientY);
+        transitionQuizPhase('guessing');
+        showOverlayMsg('ターゲットを更新しました！');
       }
-      // In other quiz phases, clicking the image does nothing
     }
+  }
+
+  function updateLoupe(imgX, imgY, hex, clientX, clientY) {
+    if (!loupeCtx) return;
+
+    const size = 4;
+    const half = Math.floor(size / 2);
+    const scale = 25;
+    const startX = imgX - half + 1;
+    const startY = imgY - half + 1;
+    
+    loupeCtx.clearRect(0, 0, 100, 100);
+
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const px = startX + dx;
+        const py = startY + dy;
+
+        if (px >= 0 && px < sourceCanvas.width && py >= 0 && py < sourceCanvas.height) {
+          const pixel = sourceCtx.getImageData(px, py, 1, 1).data;
+          loupeCtx.fillStyle = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+          loupeCtx.fillRect(dx * scale, dy * scale, scale, scale);
+        } else {
+          loupeCtx.fillStyle = '#000';
+          loupeCtx.fillRect(dx * scale, dy * scale, scale, scale);
+        }
+      }
+    }
+
+    // Central red square
+    loupeCtx.strokeStyle = '#ff0000';
+    loupeCtx.lineWidth = 1.5;
+    loupeCtx.strokeRect((half - 1) * scale, (half - 1) * scale, scale, scale);
+
+    // Grid lines
+    loupeCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+    loupeCtx.lineWidth = 1;
+    loupeCtx.beginPath();
+    for (let i = 1; i < size; i++) {
+      loupeCtx.moveTo(i * scale, 0);
+      loupeCtx.lineTo(i * scale, 100);
+      loupeCtx.moveTo(0, i * scale);
+      loupeCtx.lineTo(100, i * scale);
+    }
+    loupeCtx.stroke();
+
+    loupeInfo.textContent = hex;
+
+    const wrapperRect = imageWrapper.getBoundingClientRect();
+    let left = clientX - wrapperRect.left + 15;
+    let top = clientY - wrapperRect.top - 125;
+    
+    if (left + 104 > wrapperRect.width) left = clientX - wrapperRect.left - 104 - 15;
+    if (top < 0) top = clientY - wrapperRect.top + 15;
+
+    loupe.style.transform = `translate(${left}px, ${top}px)`;
+    loupe.classList.add('visible');
   }
 
   function onImageMouseMove(e) {
@@ -1671,6 +1991,7 @@ body {
       statusCoords.textContent = '座標: -';
       statusHex.textContent = '色: -';
       statusSwatch.style.backgroundColor = 'transparent';
+      loupe.classList.remove('visible');
       return;
     }
 
@@ -1678,6 +1999,8 @@ body {
     const hex = rgbToHex(color.r, color.g, color.b);
     statusHex.textContent = `色: ${hex}`;
     statusSwatch.style.backgroundColor = hex;
+    
+    updateLoupe(color.imgX, color.imgY, hex, e.clientX, e.clientY);
   }
 
   /* ──────────────────────────────────────────────────────────────
@@ -1760,15 +2083,15 @@ body {
           targetSwatchGroup.style.display = 'flex';
           targetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
         } else {
-          // Mode B: hide target color
+          // Mode B: ALSO show target color
+          const tc = state.targetColor;
           quizTargetArea.style.display = 'flex';
-          quizTargetSwatch.style.backgroundColor = '#333';
-          quizTargetSwatch.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.05) 4px, rgba(255,255,255,.05) 8px)';
-          quizTargetText.textContent = '選んだ場所の色を思い出して、カラーピッカーで再現してください。';
+          quizTargetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+          quizTargetText.textContent = '選んだ場所の色をカラーピッカーで再現してください。画像を再度クリックで変更可能です。';
 
           targetSwatchGroup.style.display = 'flex';
-          targetSwatch.style.backgroundColor = '#333';
-          targetSwatch.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.05) 4px, rgba(255,255,255,.05) 8px)';
+          targetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+          targetSwatch.style.backgroundImage = 'none';
         }
         hideOverlayMsg();
         break;
@@ -1799,6 +2122,10 @@ body {
     if (state.quizMode === 'A') {
       // Random color
       state.targetColor = getRandomImageColor();
+      const coords = imageToClientCoords(state.targetColor.imgX, state.targetColor.imgY);
+      if (coords) {
+        showPickMarker(coords.clientX, coords.clientY);
+      }
       transitionQuizPhase('guessing');
     } else {
       // User picks target
@@ -2013,6 +2340,7 @@ body {
       statusCoords.textContent = '座標: -';
       statusHex.textContent = '色: -';
       statusSwatch.style.backgroundColor = 'transparent';
+      loupe.classList.remove('visible');
     });
 
     // ── Picker Canvas ──
