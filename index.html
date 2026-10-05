@@ -1688,7 +1688,7 @@ body {
   function getCopyText(id) {
     const [r, g, b] = getCurrentRgb();
     switch (id) {
-      case 'hex':  return rgbToHex(r, g, b);
+      case 'hex':  return rgbToHex(r, g, b).replace(/^#/, '');
       case 'rgb':  return `${r}, ${g}, ${b}`;
       case 'cmyk': { const c = rgbToCmyk(r, g, b); return `${c.c}, ${c.m}, ${c.y}, ${c.k}`; }
       case 'hsv':  { const h = rgbToHsv(r, g, b); return `${Math.round(h.h)}, ${Math.round(h.s * 100)}, ${Math.round(h.v * 100)}`; }
