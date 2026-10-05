@@ -1,0 +1,2083 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ColorSensei - 色彩感覚トレーニング＆カラーピッカー</title>
+<meta name="description" content="色彩感覚をトレーニングするクイズ＆カラーピッカーアプリ。画像からの色抽出、HEX/RGB/CMYK/HSV/HSL/L*a*b*変換に対応。">
+<style>
+/* ============================================================
+   CSS Custom Properties & Reset
+   ============================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #08080f;
+  --bg-primary: #0e0e1a;
+  --bg-secondary: #151524;
+  --bg-card: #1b1b30;
+  --bg-elevated: #222240;
+  --bg-hover: #2a2a4d;
+  --bg-input: #121220;
+
+  --border-subtle: #262645;
+  --border-default: #32325a;
+  --border-accent: rgba(120, 100, 255, 0.45);
+
+  --text-primary: #e8e8f2;
+  --text-secondary: #9898b8;
+  --text-muted: #606080;
+
+  --accent: #7c6cff;
+  --accent-hover: #907fff;
+  --accent-glow: rgba(124, 108, 255, 0.18);
+  --accent-secondary: #ff6b8a;
+  --accent-gradient: linear-gradient(135deg, #7c6cff, #c47cff);
+
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --shadow: 0 4px 20px rgba(0,0,0,.45);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,.55);
+  --shadow-glow: 0 0 28px rgba(124,108,255,.14);
+
+  --transition: 200ms ease;
+  --transition-slow: 400ms ease;
+}
+
+html { height: 100%; }
+body {
+  min-height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ============================================================
+   Scrollbar
+   ============================================================ */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ============================================================
+   Layout
+   ============================================================ */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 28px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--accent-gradient);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 2px 12px rgba(124,108,255,.3);
+}
+
+.logo h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo h1 span {
+  font-weight: 400;
+  opacity: .85;
+}
+
+/* Mode Navigation */
+.mode-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-secondary);
+  padding: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+}
+
+.mode-btn {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(124,108,255,.35);
+}
+
+/* Main Content */
+.app-main {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   Image Panel
+   ============================================================ */
+.image-panel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  min-height: 0;
+  position: relative;
+}
+
+.upload-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  cursor: pointer;
+}
+
+.upload-area.hidden { display: none; }
+
+.upload-dropzone {
+  width: 100%;
+  max-width: 520px;
+  padding: 60px 40px;
+  border: 2px dashed var(--border-default);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  transition: var(--transition-slow);
+  background: var(--bg-secondary);
+}
+
+.upload-dropzone.drag-over {
+  border-color: var(--accent);
+  background: rgba(124,108,255,.06);
+  box-shadow: var(--shadow-glow);
+  transform: scale(1.01);
+}
+
+.upload-icon {
+  font-size: 52px;
+  margin-bottom: 16px;
+  opacity: .7;
+  display: block;
+}
+
+.upload-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.upload-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.upload-btn {
+  display: inline-block;
+  padding: 10px 28px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.upload-btn:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 16px rgba(124,108,255,.35);
+}
+
+#file-input { display: none; }
+
+/* Image Display */
+.image-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.image-display.hidden { display: none; }
+
+.image-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.image-info {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.image-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+.image-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+#display-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: crosshair;
+  border-radius: var(--radius-sm);
+  transition: opacity var(--transition);
+  display: block;
+}
+
+.pick-marker {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 8px rgba(0,0,0,.4);
+  display: none;
+  z-index: 10;
+}
+
+.pick-marker::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 4px; height: 4px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5);
+}
+
+.pick-marker.visible { display: block; }
+
+.image-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.image-status-bar .status-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border-default);
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.quiz-overlay-msg {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(124,108,255,.9);
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.quiz-overlay-msg.visible {
+  opacity: 1;
+}
+
+/* ============================================================
+   Tools Panel (Right Sidebar)
+   ============================================================ */
+.tools-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.panel-section {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel-section:last-child { border-bottom: none; }
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* Color Picker */
+.picker-container {
+  display: flex;
+  justify-content: center;
+  padding: 16px 20px 8px;
+}
+
+#picker-canvas {
+  cursor: crosshair;
+  border-radius: 50%;
+  touch-action: none;
+}
+
+/* Color Preview Swatches */
+.color-preview {
+  display: flex;
+  gap: 12px;
+  padding: 8px 20px 12px;
+  justify-content: center;
+}
+
+.swatch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.swatch {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border-default);
+  box-shadow: var(--shadow);
+  transition: background-color var(--transition);
+}
+
+.swatch-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-weight: 500;
+}
+
+.swatch-hidden { visibility: hidden; }
+
+/* Color Values */
+.color-values {
+  padding: 0 20px 16px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+
+.color-row:last-child { border-bottom: none; }
+
+.color-label {
+  width: 52px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: .5px;
+  flex-shrink: 0;
+}
+
+.color-value {
+  flex: 1;
+  font-size: 13px;
+  font-family: 'Consolas', 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.copy-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.copy-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.copy-btn.copied {
+  background: rgba(74,222,128,.15);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.copy-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ============================================================
+   Quiz Section
+   ============================================================ */
+.quiz-section {
+  padding: 16px 20px 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.quiz-section.hidden { display: none; }
+
+.quiz-mode-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-input);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.quiz-mode-btn {
+  flex: 1;
+  padding: 7px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.quiz-mode-btn:hover { color: var(--text-primary); }
+
+.quiz-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.quiz-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.quiz-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quiz-stat-value {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Quiz States */
+.quiz-state { display: none; }
+.quiz-state.active { display: block; }
+
+.quiz-description {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+.quiz-target-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+}
+
+.quiz-target-swatch {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.quiz-target-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Quiz Result */
+.quiz-result-display {
+  text-align: center;
+  padding: 8px 0;
+}
+
+.result-swatches {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.result-swatch-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.result-swatch {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border-default);
+  box-shadow: var(--shadow);
+}
+
+.result-swatch-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.result-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 20px;
+  padding-bottom: 20px;
+}
+
+.score-display {
+  margin-bottom: 8px;
+}
+
+.score-value {
+  font-size: 56px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: color var(--transition);
+}
+
+.score-unit {
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 2px;
+}
+
+.score-excellent { color: #4ade80; }
+.score-great { color: #86efac; }
+.score-good { color: #a3e635; }
+.score-average { color: #fbbf24; }
+.score-poor { color: #fb923c; }
+.score-bad { color: #f87171; }
+
+.score-details {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.score-rating {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.delta-e-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* Buttons */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 11px 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 16px rgba(124,108,255,.35);
+}
+
+.btn-answer {
+  background: linear-gradient(135deg, var(--accent-secondary), #ff8fa8);
+  color: #fff;
+}
+
+.btn-answer:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(255,107,138,.35);
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.app-footer {
+  padding: 12px 28px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.disclaimer {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 800px;
+}
+
+/* ============================================================
+   Toast Notification
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-glow), var(--shadow);
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform .35s cubic-bezier(.4,0,.2,1), opacity .35s ease;
+  z-index: 1000;
+  pointer-events: none;
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124,108,255,.4); }
+  50% { box-shadow: 0 0 0 8px rgba(124,108,255,0); }
+}
+
+@keyframes scoreReveal {
+  from { transform: scale(.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn .4s ease forwards;
+}
+
+.pulse-border {
+  animation: pulse 2s ease infinite;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 860px) {
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+
+  .image-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    min-height: 300px;
+    max-height: 50vh;
+  }
+
+  .tools-panel {
+    max-height: none;
+  }
+
+  .app-header {
+    padding: 10px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mode-btn { padding: 6px 14px; font-size: 12px; }
+  .panel-section { padding: 14px; }
+  .picker-container { padding: 12px 14px 4px; }
+  .color-preview { padding: 6px 14px 10px; }
+  .color-values { padding: 0 14px 12px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- ═══════════ Header ═══════════ -->
+  <header class="app-header">
+    <div class="logo">
+      <div class="logo-icon">🎨</div>
+      <h1>Color<span>Sensei</span></h1>
+    </div>
+    <nav class="mode-nav">
+      <button class="mode-btn active" data-mode="picker" id="btn-mode-picker">🎯 カラーピッカー</button>
+      <button class="mode-btn" data-mode="quiz" id="btn-mode-quiz">🧠 クイズ</button>
+    </nav>
+  </header>
+
+  <!-- ═══════════ Main Content ═══════════ -->
+  <main class="app-main">
+
+    <!-- ─── Image Panel ─── -->
+    <section class="image-panel">
+      <!-- Upload Area -->
+      <div class="upload-area" id="upload-area">
+        <div class="upload-dropzone" id="upload-dropzone">
+          <span class="upload-icon">🖼️</span>
+          <div class="upload-title">画像をドラッグ＆ドロップ</div>
+          <div class="upload-subtitle">または下のボタンからファイルを選択</div>
+          <label class="upload-btn" for="file-input">ファイルを選択</label>
+          <input type="file" id="file-input" accept="image/*">
+        </div>
+      </div>
+
+      <!-- Image Display -->
+      <div class="image-display hidden" id="image-display">
+        <div class="image-toolbar">
+          <span class="image-info" id="image-info">-</span>
+          <div class="image-toolbar-right">
+            <button class="toolbar-btn" id="btn-change-image">画像を変更</button>
+          </div>
+        </div>
+        <div class="image-wrapper" id="image-wrapper">
+          <img id="display-img" alt="読み込んだ画像">
+          <div class="pick-marker" id="pick-marker"></div>
+          <div class="quiz-overlay-msg" id="quiz-overlay-msg"></div>
+        </div>
+        <div class="image-status-bar" id="image-status-bar">
+          <span id="status-coords">座標: -</span>
+          <span id="status-hex">色: -</span>
+          <span class="status-color" id="status-swatch"></span>
+        </div>
+      </div>
+
+      <!-- Hidden source canvas -->
+      <canvas id="source-canvas" style="display:none"></canvas>
+    </section>
+
+    <!-- ─── Tools Panel ─── -->
+    <section class="tools-panel">
+      <!-- Color Picker -->
+      <div class="picker-container">
+        <canvas id="picker-canvas" width="280" height="280"></canvas>
+      </div>
+
+      <!-- Color Preview -->
+      <div class="color-preview">
+        <div class="swatch-group">
+          <div class="swatch" id="current-swatch"></div>
+          <span class="swatch-label">選択色</span>
+        </div>
+        <div class="swatch-group" id="target-swatch-group" style="display:none">
+          <div class="swatch" id="target-swatch"></div>
+          <span class="swatch-label">ターゲット</span>
+        </div>
+      </div>
+
+      <!-- Color Values -->
+      <div class="color-values" id="color-values-container">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Quiz Section -->
+      <div class="quiz-section hidden" id="quiz-section">
+        <div class="section-title">クイズ</div>
+
+        <div class="quiz-mode-tabs">
+          <button class="quiz-mode-btn active" data-quiz-mode="A" id="btn-quiz-A">モードA：ランダム</button>
+          <button class="quiz-mode-btn" data-quiz-mode="B" id="btn-quiz-B">モードB：指定</button>
+        </div>
+
+        <div class="quiz-stats" id="quiz-stats">
+          <div class="quiz-stat">回答数: <span class="quiz-stat-value" id="stat-count">0</span></div>
+          <div class="quiz-stat">平均: <span class="quiz-stat-value" id="stat-avg">-</span></div>
+          <div class="quiz-stat">最高: <span class="quiz-stat-value" id="stat-best">-</span></div>
+        </div>
+
+        <!-- State: Idle -->
+        <div class="quiz-state active" id="quiz-idle">
+          <div class="quiz-description" id="quiz-desc">
+            画像上のランダムな位置の色が出題されます。カラーピッカーで出来るだけ近い色を作って回答してください。
+          </div>
+          <button class="btn btn-primary" id="btn-quiz-start" disabled>クイズ開始</button>
+        </div>
+
+        <!-- State: Picking (Mode B) -->
+        <div class="quiz-state" id="quiz-picking">
+          <div class="quiz-description">
+            画像上の好きな場所をクリックして、ターゲット色を設定してください。
+          </div>
+        </div>
+
+        <!-- State: Guessing -->
+        <div class="quiz-state" id="quiz-guessing">
+          <div class="quiz-target-area" id="quiz-target-area">
+            <div class="quiz-target-swatch" id="quiz-target-swatch"></div>
+            <div class="quiz-target-text" id="quiz-target-text">
+              この色に近い色をカラーピッカーで作ってください。
+            </div>
+          </div>
+          <button class="btn btn-answer" id="btn-quiz-answer">回答する</button>
+        </div>
+
+        <!-- State: Result -->
+        <div class="quiz-state" id="quiz-result">
+          <div class="quiz-result-display fade-in">
+            <div class="result-swatches">
+              <div class="result-swatch-group">
+                <div class="result-swatch" id="result-target-swatch"></div>
+                <span class="result-swatch-label">正解</span>
+              </div>
+              <div class="result-arrow">→</div>
+              <div class="result-swatch-group">
+                <div class="result-swatch" id="result-answer-swatch"></div>
+                <span class="result-swatch-label">あなたの回答</span>
+              </div>
+            </div>
+            <div class="score-display">
+              <span class="score-value" id="score-value">0</span><span class="score-unit">/ 100点</span>
+            </div>
+            <div class="score-rating" id="score-rating"></div>
+            <div class="delta-e-info" id="delta-e-info"></div>
+          </div>
+          <button class="btn btn-primary" id="btn-quiz-next">次の問題</button>
+        </div>
+      </div>
+
+      <!-- Disclaimer -->
+      <div class="panel-section" style="margin-top:auto;">
+        <p class="disclaimer">
+          ※算出される色空間の値（CMYK, L*a*b*等）は標準的な計算式による近似値であり、Clip Studio等のペイントソフトとは微小な誤差が生じる場合があります。
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================================================================
+   ColorSensei - Main Application Script
+   ================================================================ */
+(function () {
+  'use strict';
+
+  /* ──────────────────────────────────────────────────────────────
+     Constants
+     ────────────────────────────────────────────────────────────── */
+  const CANVAS_SIZE = 280;
+  const CX = CANVAS_SIZE / 2;
+  const CY = CANVAS_SIZE / 2;
+  const OUTER_R = 130;
+  const INNER_R = 100;
+  const SV_SIZE = 132;
+  const SV_HALF = SV_SIZE / 2;
+  const SV_X = CX - SV_HALF;
+  const SV_Y = CY - SV_HALF;
+  const DE_THRESHOLD = 100;
+
+  /* ──────────────────────────────────────────────────────────────
+     Color Conversion Utilities
+     ────────────────────────────────────────────────────────────── */
+
+  function hsvToRgb(h, s, v) {
+    h = ((h % 360) + 360) % 360;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r, g, b;
+    if (h < 60)       { r = c; g = x; b = 0; }
+    else if (h < 120) { r = x; g = c; b = 0; }
+    else if (h < 180) { r = 0; g = c; b = x; }
+    else if (h < 240) { r = 0; g = x; b = c; }
+    else if (h < 300) { r = x; g = 0; b = c; }
+    else              { r = c; g = 0; b = x; }
+    return [
+      Math.round((r + m) * 255),
+      Math.round((g + m) * 255),
+      Math.round((b + m) * 255)
+    ];
+  }
+
+  function rgbToHsv(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0, s = 0, v = max;
+    if (max !== 0) s = d / max;
+    if (d !== 0) {
+      if (max === r)      h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else                h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    return { h, s, v };
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r)      h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+      else if (max === g) h = ((b - r) / d + 2) / 6;
+      else                h = ((r - g) / d + 4) / 6;
+      h *= 360;
+    }
+    return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+  }
+
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0').toUpperCase()).join('');
+  }
+
+  function rgbToCmyk(r, g, b) {
+    if (r === 0 && g === 0 && b === 0) return { c: 0, m: 0, y: 0, k: 100 };
+    const c1 = 1 - r / 255;
+    const m1 = 1 - g / 255;
+    const y1 = 1 - b / 255;
+    const k = Math.min(c1, m1, y1);
+    const d = 1 - k;
+    return {
+      c: Math.round((c1 - k) / d * 100),
+      m: Math.round((m1 - k) / d * 100),
+      y: Math.round((y1 - k) / d * 100),
+      k: Math.round(k * 100)
+    };
+  }
+
+  function rgbToLab(r, g, b) {
+    // sRGB → Linear RGB
+    let rl = r / 255, gl = g / 255, bl = b / 255;
+    rl = rl > 0.04045 ? Math.pow((rl + 0.055) / 1.055, 2.4) : rl / 12.92;
+    gl = gl > 0.04045 ? Math.pow((gl + 0.055) / 1.055, 2.4) : gl / 12.92;
+    bl = bl > 0.04045 ? Math.pow((bl + 0.055) / 1.055, 2.4) : bl / 12.92;
+
+    // Linear RGB → XYZ (D65 illuminant)
+    let x = rl * 0.4124564 + gl * 0.3575761 + bl * 0.1804375;
+    let y = rl * 0.2126729 + gl * 0.7151522 + bl * 0.0721750;
+    let z = rl * 0.0193339 + gl * 0.1191920 + bl * 0.9503041;
+
+    // XYZ → L*a*b*  (D65 reference white)
+    const xn = 0.95047, yn = 1.00000, zn = 1.08883;
+    x /= xn; y /= yn; z /= zn;
+
+    const epsilon = 0.008856;
+    const kappa = 903.3;
+    const f = t => t > epsilon ? Math.cbrt(t) : (kappa * t + 16) / 116;
+
+    const fx = f(x), fy = f(y), fz = f(z);
+    return {
+      l: 116 * fy - 16,
+      a: 500 * (fx - fy),
+      b: 200 * (fy - fz)
+    };
+  }
+
+  function deltaE76(lab1, lab2) {
+    return Math.sqrt(
+      (lab1.l - lab2.l) ** 2 +
+      (lab1.a - lab2.a) ** 2 +
+      (lab1.b - lab2.b) ** 2
+    );
+  }
+
+  function calculateScore(dE) {
+    if (dE >= DE_THRESHOLD) return 0;
+    // Non-linear: more forgiving for small ΔE, sharper fall-off for large
+    return Math.max(0, Math.round(100 * Math.pow(1 - dE / DE_THRESHOLD, 1.5)));
+  }
+
+  function getScoreClass(score) {
+    if (score >= 95) return 'score-excellent';
+    if (score >= 85) return 'score-great';
+    if (score >= 70) return 'score-good';
+    if (score >= 50) return 'score-average';
+    if (score >= 25) return 'score-poor';
+    return 'score-bad';
+  }
+
+  function getScoreRating(score) {
+    if (score >= 95) return '✨ 完璧！';
+    if (score >= 85) return '🎉 素晴らしい！';
+    if (score >= 70) return '👍 良い感じ！';
+    if (score >= 50) return '🤔 惜しい！';
+    if (score >= 25) return '💪 もう少し！';
+    return '🔥 頑張ろう！';
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Application State
+     ────────────────────────────────────────────────────────────── */
+  const state = {
+    hue: 0,
+    saturation: 1,
+    value: 1,
+    imageLoaded: false,
+    appMode: 'picker',      // 'picker' | 'quiz'
+    quizMode: 'A',           // 'A' | 'B'
+    quizPhase: 'idle',       // 'idle' | 'picking' | 'guessing' | 'result'
+    targetColor: null,       // {r, g, b}
+    dragTarget: null,        // null | 'hue' | 'sv'
+  };
+
+  const quizStats = {
+    total: 0,
+    sum: 0,
+    best: 0,
+    get avg() { return this.total > 0 ? Math.round(this.sum / this.total) : 0; }
+  };
+
+  /* ──────────────────────────────────────────────────────────────
+     DOM References
+     ────────────────────────────────────────────────────────────── */
+  const $ = id => document.getElementById(id);
+
+  // Image
+  const uploadArea = $('upload-area');
+  const uploadDropzone = $('upload-dropzone');
+  const fileInput = $('file-input');
+  const imageDisplay = $('image-display');
+  const displayImg = $('display-img');
+  const sourceCanvas = $('source-canvas');
+  const sourceCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  const pickMarker = $('pick-marker');
+  const imageWrapper = $('image-wrapper');
+  const imageInfo = $('image-info');
+  const statusCoords = $('status-coords');
+  const statusHex = $('status-hex');
+  const statusSwatch = $('status-swatch');
+  const quizOverlayMsg = $('quiz-overlay-msg');
+
+  // Picker
+  const pickerCanvas = $('picker-canvas');
+  const pickerCtx = pickerCanvas.getContext('2d');
+  const currentSwatch = $('current-swatch');
+  const targetSwatchGroup = $('target-swatch-group');
+  const targetSwatch = $('target-swatch');
+  const colorValuesContainer = $('color-values-container');
+
+  // Mode
+  const btnModePicker = $('btn-mode-picker');
+  const btnModeQuiz = $('btn-mode-quiz');
+
+  // Quiz
+  const quizSection = $('quiz-section');
+  const btnQuizA = $('btn-quiz-A');
+  const btnQuizB = $('btn-quiz-B');
+  const btnQuizStart = $('btn-quiz-start');
+  const btnQuizAnswer = $('btn-quiz-answer');
+  const btnQuizNext = $('btn-quiz-next');
+  const quizDesc = $('quiz-desc');
+
+  // Quiz states
+  const quizIdle = $('quiz-idle');
+  const quizPicking = $('quiz-picking');
+  const quizGuessing = $('quiz-guessing');
+  const quizResult = $('quiz-result');
+  const quizTargetArea = $('quiz-target-area');
+  const quizTargetSwatch = $('quiz-target-swatch');
+  const quizTargetText = $('quiz-target-text');
+
+  // Result
+  const resultTargetSwatch = $('result-target-swatch');
+  const resultAnswerSwatch = $('result-answer-swatch');
+  const scoreValueEl = $('score-value');
+  const scoreRatingEl = $('score-rating');
+  const deltaEInfoEl = $('delta-e-info');
+
+  // Stats
+  const statCount = $('stat-count');
+  const statAvg = $('stat-avg');
+  const statBest = $('stat-best');
+
+  // Toast
+  const toastEl = $('toast');
+
+  /* ──────────────────────────────────────────────────────────────
+     Hue Wheel Cache
+     ────────────────────────────────────────────────────────────── */
+  let hueWheelImageData = null;
+
+  function buildHueWheel() {
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = CANVAS_SIZE;
+    tmpCanvas.height = CANVAS_SIZE;
+    const tmpCtx = tmpCanvas.getContext('2d');
+    const imgData = tmpCtx.createImageData(CANVAS_SIZE, CANVAS_SIZE);
+    const data = imgData.data;
+
+    for (let py = 0; py < CANVAS_SIZE; py++) {
+      for (let px = 0; px < CANVAS_SIZE; px++) {
+        const dx = px - CX;
+        const dy = py - CY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist >= INNER_R - 1 && dist <= OUTER_R + 1) {
+          const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+          const [r, g, b] = hsvToRgb(angle, 1, 1);
+          const idx = (py * CANVAS_SIZE + px) * 4;
+
+          // Anti-aliased edges
+          let alpha = 255;
+          if (dist < INNER_R) alpha = Math.max(0, Math.round((1 - (INNER_R - dist)) * 255));
+          else if (dist > OUTER_R) alpha = Math.max(0, Math.round((1 - (dist - OUTER_R)) * 255));
+
+          data[idx]     = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+          data[idx + 3] = alpha;
+        }
+      }
+    }
+
+    hueWheelImageData = imgData;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Drawing - Color Picker
+     ────────────────────────────────────────────────────────────── */
+
+  function drawSVSquare() {
+    const imgData = pickerCtx.createImageData(SV_SIZE, SV_SIZE);
+    const data = imgData.data;
+    const h = state.hue;
+
+    for (let py = 0; py < SV_SIZE; py++) {
+      const v = 1 - py / (SV_SIZE - 1);
+      for (let px = 0; px < SV_SIZE; px++) {
+        const s = px / (SV_SIZE - 1);
+        const [r, g, b] = hsvToRgb(h, s, v);
+        const idx = (py * SV_SIZE + px) * 4;
+        data[idx]     = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    }
+
+    pickerCtx.putImageData(imgData, SV_X, SV_Y);
+  }
+
+  function drawIndicators() {
+    // Hue indicator
+    const hRad = state.hue * Math.PI / 180;
+    const hR = (INNER_R + OUTER_R) / 2;
+    const hx = CX + hR * Math.cos(hRad);
+    const hy = CY + hR * Math.sin(hRad);
+
+    pickerCtx.beginPath();
+    pickerCtx.arc(hx, hy, 8, 0, Math.PI * 2);
+    pickerCtx.strokeStyle = '#fff';
+    pickerCtx.lineWidth = 2.5;
+    pickerCtx.stroke();
+    pickerCtx.beginPath();
+    pickerCtx.arc(hx, hy, 8, 0, Math.PI * 2);
+    pickerCtx.strokeStyle = 'rgba(0,0,0,.35)';
+    pickerCtx.lineWidth = 1;
+    pickerCtx.stroke();
+
+    // SV indicator
+    const sx = SV_X + state.saturation * (SV_SIZE - 1);
+    const sy = SV_Y + (1 - state.value) * (SV_SIZE - 1);
+
+    pickerCtx.beginPath();
+    pickerCtx.arc(sx, sy, 7, 0, Math.PI * 2);
+    pickerCtx.strokeStyle = '#fff';
+    pickerCtx.lineWidth = 2.5;
+    pickerCtx.stroke();
+    pickerCtx.beginPath();
+    pickerCtx.arc(sx, sy, 7, 0, Math.PI * 2);
+    pickerCtx.strokeStyle = 'rgba(0,0,0,.35)';
+    pickerCtx.lineWidth = 1;
+    pickerCtx.stroke();
+  }
+
+  function renderPicker() {
+    pickerCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+    // Draw cached hue wheel
+    if (hueWheelImageData) {
+      pickerCtx.putImageData(hueWheelImageData, 0, 0);
+    }
+
+    // SV square border (subtle)
+    pickerCtx.strokeStyle = 'rgba(255,255,255,.08)';
+    pickerCtx.lineWidth = 1;
+    pickerCtx.strokeRect(SV_X - 0.5, SV_Y - 0.5, SV_SIZE + 1, SV_SIZE + 1);
+
+    drawSVSquare();
+    drawIndicators();
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Color Display / Values
+     ────────────────────────────────────────────────────────────── */
+
+  const colorRows = [
+    { id: 'hex',  label: 'HEX' },
+    { id: 'rgb',  label: 'RGB' },
+    { id: 'cmyk', label: 'CMYK' },
+    { id: 'hsv',  label: 'HSV' },
+    { id: 'hsl',  label: 'HSL' },
+    { id: 'lab',  label: 'L*a*b*' },
+  ];
+
+  function buildColorValuesUI() {
+    colorValuesContainer.innerHTML = '';
+    colorRows.forEach(row => {
+      const div = document.createElement('div');
+      div.className = 'color-row';
+      div.innerHTML = `
+        <span class="color-label">${row.label}</span>
+        <span class="color-value" id="val-${row.id}">-</span>
+        <button class="copy-btn" data-copy-id="${row.id}" title="コピー">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+          </svg>
+          Copy
+        </button>
+      `;
+      colorValuesContainer.appendChild(div);
+    });
+  }
+
+  function getCurrentRgb() {
+    return hsvToRgb(state.hue, state.saturation, state.value);
+  }
+
+  function updateColorDisplay() {
+    const [r, g, b] = getCurrentRgb();
+    const hex = rgbToHex(r, g, b);
+    const hsv = rgbToHsv(r, g, b);
+    const hsl = rgbToHsl(r, g, b);
+    const cmyk = rgbToCmyk(r, g, b);
+    const lab = rgbToLab(r, g, b);
+
+    // Display values (human-readable)
+    $('val-hex').textContent = hex;
+    $('val-rgb').textContent = `R:${r}  G:${g}  B:${b}`;
+    $('val-cmyk').textContent = `C:${cmyk.c}  M:${cmyk.m}  Y:${cmyk.y}  K:${cmyk.k}`;
+    $('val-hsv').textContent = `H:${Math.round(hsv.h)}°  S:${Math.round(hsv.s * 100)}%  V:${Math.round(hsv.v * 100)}%`;
+    $('val-hsl').textContent = `H:${hsl.h}°  S:${hsl.s}%  L:${hsl.l}%`;
+    $('val-lab').textContent = `L:${Math.round(lab.l)}  a:${Math.round(lab.a)}  b:${Math.round(lab.b)}`;
+
+    // Update swatch
+    currentSwatch.style.backgroundColor = hex;
+  }
+
+  function getCopyText(id) {
+    const [r, g, b] = getCurrentRgb();
+    switch (id) {
+      case 'hex':  return rgbToHex(r, g, b);
+      case 'rgb':  return `${r}, ${g}, ${b}`;
+      case 'cmyk': { const c = rgbToCmyk(r, g, b); return `${c.c}, ${c.m}, ${c.y}, ${c.k}`; }
+      case 'hsv':  { const h = rgbToHsv(r, g, b); return `${Math.round(h.h)}, ${Math.round(h.s * 100)}, ${Math.round(h.v * 100)}`; }
+      case 'hsl':  { const h = rgbToHsl(r, g, b); return `${h.h}, ${h.s}, ${h.l}`; }
+      case 'lab':  { const l = rgbToLab(r, g, b); return `${Math.round(l.l)}, ${Math.round(l.a)}, ${Math.round(l.b)}`; }
+      default: return '';
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Image Handling
+     ────────────────────────────────────────────────────────────── */
+
+  function loadImage(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        // Draw to source canvas at original resolution
+        sourceCanvas.width = img.width;
+        sourceCanvas.height = img.height;
+        sourceCtx.drawImage(img, 0, 0);
+
+        // Set display image
+        displayImg.src = e.target.result;
+        displayImg.onload = () => {
+          // Show image display
+          uploadArea.classList.add('hidden');
+          imageDisplay.classList.remove('hidden');
+          imageInfo.textContent = `${img.width} × ${img.height}px`;
+          state.imageLoaded = true;
+
+          // Enable quiz start
+          btnQuizStart.disabled = false;
+
+          // Reset any quiz state
+          if (state.quizPhase !== 'idle') {
+            resetQuiz();
+          }
+        };
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /**
+   * Get the rendered image rectangle within the <img> element,
+   * accounting for object-fit: contain letterboxing.
+   */
+  function getImageRenderRect() {
+    const rect = displayImg.getBoundingClientRect();
+    const natW = displayImg.naturalWidth;
+    const natH = displayImg.naturalHeight;
+
+    if (!natW || !natH) return null;
+
+    const aspectRatio = natW / natH;
+    const boxRatio = rect.width / rect.height;
+
+    let renderW, renderH, offsetX, offsetY;
+    if (aspectRatio > boxRatio) {
+      renderW = rect.width;
+      renderH = rect.width / aspectRatio;
+      offsetX = 0;
+      offsetY = (rect.height - renderH) / 2;
+    } else {
+      renderH = rect.height;
+      renderW = rect.height * aspectRatio;
+      offsetX = (rect.width - renderW) / 2;
+      offsetY = 0;
+    }
+
+    return { renderW, renderH, offsetX, offsetY, boxLeft: rect.left, boxTop: rect.top };
+  }
+
+  function getPixelColorAt(clientX, clientY) {
+    const info = getImageRenderRect();
+    if (!info) return null;
+
+    const relX = clientX - info.boxLeft - info.offsetX;
+    const relY = clientY - info.boxTop - info.offsetY;
+
+    if (relX < 0 || relX >= info.renderW || relY < 0 || relY >= info.renderH) return null;
+
+    const scaleX = sourceCanvas.width / info.renderW;
+    const scaleY = sourceCanvas.height / info.renderH;
+
+    const imgX = Math.max(0, Math.min(Math.floor(relX * scaleX), sourceCanvas.width - 1));
+    const imgY = Math.max(0, Math.min(Math.floor(relY * scaleY), sourceCanvas.height - 1));
+
+    const pixel = sourceCtx.getImageData(imgX, imgY, 1, 1).data;
+    return { r: pixel[0], g: pixel[1], b: pixel[2], imgX, imgY };
+  }
+
+  function getRandomImageColor() {
+    const w = sourceCanvas.width;
+    const h = sourceCanvas.height;
+    const x = Math.floor(Math.random() * w);
+    const y = Math.floor(Math.random() * h);
+    const pixel = sourceCtx.getImageData(x, y, 1, 1).data;
+    return { r: pixel[0], g: pixel[1], b: pixel[2] };
+  }
+
+  function showPickMarker(clientX, clientY) {
+    const wrapperRect = imageWrapper.getBoundingClientRect();
+    pickMarker.style.left = (clientX - wrapperRect.left) + 'px';
+    pickMarker.style.top = (clientY - wrapperRect.top) + 'px';
+    pickMarker.classList.add('visible');
+  }
+
+  function hidePickMarker() {
+    pickMarker.classList.remove('visible');
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Picker Interaction
+     ────────────────────────────────────────────────────────────── */
+
+  function getPickerCoords(e) {
+    const rect = pickerCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  }
+
+  function getPickerRegion(x, y) {
+    const dx = x - CX;
+    const dy = y - CY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Check SV square first (it's inside the ring)
+    if (x >= SV_X && x <= SV_X + SV_SIZE && y >= SV_Y && y <= SV_Y + SV_SIZE) {
+      return 'sv';
+    }
+
+    // Check hue ring
+    if (dist >= INNER_R - 4 && dist <= OUTER_R + 4) {
+      return 'hue';
+    }
+
+    return null;
+  }
+
+  function handlePickerDrag(x, y) {
+    if (state.dragTarget === 'hue') {
+      const dx = x - CX;
+      const dy = y - CY;
+      const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+      state.hue = angle;
+    } else if (state.dragTarget === 'sv') {
+      state.saturation = Math.max(0, Math.min(1, (x - SV_X) / SV_SIZE));
+      state.value = Math.max(0, Math.min(1, 1 - (y - SV_Y) / SV_SIZE));
+    }
+
+    renderPicker();
+    updateColorDisplay();
+  }
+
+  function onPickerDown(e) {
+    e.preventDefault();
+    const { x, y } = getPickerCoords(e);
+    const region = getPickerRegion(x, y);
+    if (region) {
+      state.dragTarget = region;
+      handlePickerDrag(x, y);
+    }
+  }
+
+  function onDocMove(e) {
+    if (!state.dragTarget) return;
+    e.preventDefault();
+    const { x, y } = getPickerCoords(e);
+    handlePickerDrag(x, y);
+  }
+
+  function onDocUp() {
+    state.dragTarget = null;
+  }
+
+  function setPickerFromRgb(r, g, b) {
+    const hsv = rgbToHsv(r, g, b);
+    state.hue = hsv.h;
+    state.saturation = hsv.s;
+    state.value = hsv.v;
+    renderPicker();
+    updateColorDisplay();
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Image Click Handling
+     ────────────────────────────────────────────────────────────── */
+
+  function onImageClick(e) {
+    if (!state.imageLoaded) return;
+
+    const color = getPixelColorAt(e.clientX, e.clientY);
+    if (!color) return;
+
+    if (state.appMode === 'picker') {
+      // Picker mode: update picker to matched color
+      setPickerFromRgb(color.r, color.g, color.b);
+      showPickMarker(e.clientX, e.clientY);
+    } else if (state.appMode === 'quiz') {
+      if (state.quizPhase === 'picking') {
+        // Mode B: set target color
+        state.targetColor = { r: color.r, g: color.g, b: color.b };
+        showPickMarker(e.clientX, e.clientY);
+        showOverlayMsg('ターゲット設定完了！');
+        transitionQuizPhase('guessing');
+      }
+      // In other quiz phases, clicking the image does nothing
+    }
+  }
+
+  function onImageMouseMove(e) {
+    if (!state.imageLoaded) return;
+
+    const color = getPixelColorAt(e.clientX, e.clientY);
+    if (!color) {
+      statusCoords.textContent = '座標: -';
+      statusHex.textContent = '色: -';
+      statusSwatch.style.backgroundColor = 'transparent';
+      return;
+    }
+
+    statusCoords.textContent = `座標: (${color.imgX}, ${color.imgY})`;
+    const hex = rgbToHex(color.r, color.g, color.b);
+    statusHex.textContent = `色: ${hex}`;
+    statusSwatch.style.backgroundColor = hex;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Mode Switching
+     ────────────────────────────────────────────────────────────── */
+
+  function setAppMode(mode) {
+    state.appMode = mode;
+
+    btnModePicker.classList.toggle('active', mode === 'picker');
+    btnModeQuiz.classList.toggle('active', mode === 'quiz');
+
+    if (mode === 'quiz') {
+      quizSection.classList.remove('hidden');
+      // Show target swatch group if in guessing/result
+      updateTargetSwatchVisibility();
+    } else {
+      quizSection.classList.add('hidden');
+      targetSwatchGroup.style.display = 'none';
+      hideOverlayMsg();
+      // Reset quiz
+      if (state.quizPhase !== 'idle') {
+        resetQuiz();
+      }
+    }
+  }
+
+  function setQuizMode(mode) {
+    state.quizMode = mode;
+    btnQuizA.classList.toggle('active', mode === 'A');
+    btnQuizB.classList.toggle('active', mode === 'B');
+
+    if (mode === 'A') {
+      quizDesc.textContent = '画像上のランダムな位置の色が出題されます。カラーピッカーで出来るだけ近い色を作って回答してください。';
+    } else {
+      quizDesc.textContent = '画像上の好きな場所をクリックして色を覚え、その色をカラーピッカーで再現してください。';
+    }
+
+    // Reset quiz state
+    if (state.quizPhase !== 'idle') {
+      resetQuiz();
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Quiz Logic
+     ────────────────────────────────────────────────────────────── */
+
+  function transitionQuizPhase(phase) {
+    state.quizPhase = phase;
+
+    // Hide all states
+    quizIdle.classList.remove('active');
+    quizPicking.classList.remove('active');
+    quizGuessing.classList.remove('active');
+    quizResult.classList.remove('active');
+
+    switch (phase) {
+      case 'idle':
+        quizIdle.classList.add('active');
+        targetSwatchGroup.style.display = 'none';
+        hideOverlayMsg();
+        break;
+
+      case 'picking':
+        quizPicking.classList.add('active');
+        targetSwatchGroup.style.display = 'none';
+        showOverlayMsg('画像をクリックしてターゲットを設定');
+        break;
+
+      case 'guessing':
+        quizGuessing.classList.add('active');
+        if (state.quizMode === 'A') {
+          // Mode A: show target color
+          const tc = state.targetColor;
+          quizTargetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+          quizTargetArea.style.display = 'flex';
+          quizTargetText.textContent = 'この色に近い色をカラーピッカーで作ってください。';
+
+          targetSwatchGroup.style.display = 'flex';
+          targetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+        } else {
+          // Mode B: hide target color
+          quizTargetArea.style.display = 'flex';
+          quizTargetSwatch.style.backgroundColor = '#333';
+          quizTargetSwatch.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.05) 4px, rgba(255,255,255,.05) 8px)';
+          quizTargetText.textContent = '選んだ場所の色を思い出して、カラーピッカーで再現してください。';
+
+          targetSwatchGroup.style.display = 'flex';
+          targetSwatch.style.backgroundColor = '#333';
+          targetSwatch.style.backgroundImage = 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255,255,255,.05) 4px, rgba(255,255,255,.05) 8px)';
+        }
+        hideOverlayMsg();
+        break;
+
+      case 'result':
+        quizResult.classList.add('active');
+        hideOverlayMsg();
+        break;
+    }
+  }
+
+  function updateTargetSwatchVisibility() {
+    if (state.quizPhase === 'guessing' || state.quizPhase === 'result') {
+      targetSwatchGroup.style.display = 'flex';
+    } else {
+      targetSwatchGroup.style.display = 'none';
+    }
+  }
+
+  function startQuiz() {
+    if (!state.imageLoaded) {
+      showToast('⚠️ まず画像を読み込んでください');
+      return;
+    }
+
+    hidePickMarker();
+
+    if (state.quizMode === 'A') {
+      // Random color
+      state.targetColor = getRandomImageColor();
+      transitionQuizPhase('guessing');
+    } else {
+      // User picks target
+      transitionQuizPhase('picking');
+    }
+  }
+
+  function submitAnswer() {
+    if (!state.targetColor) return;
+
+    const [ar, ag, ab] = getCurrentRgb();
+    const answerColor = { r: ar, g: ag, b: ab };
+    const tc = state.targetColor;
+
+    // Calculate ΔE
+    const targetLab = rgbToLab(tc.r, tc.g, tc.b);
+    const answerLab = rgbToLab(ar, ag, ab);
+    const dE = deltaE76(targetLab, answerLab);
+    const score = calculateScore(dE);
+
+    // Update stats
+    quizStats.total++;
+    quizStats.sum += score;
+    if (score > quizStats.best) quizStats.best = score;
+    updateStatsDisplay();
+
+    // Show result
+    resultTargetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+    resultAnswerSwatch.style.backgroundColor = rgbToHex(ar, ag, ab);
+
+    // Reveal target in swatch
+    targetSwatch.style.backgroundColor = rgbToHex(tc.r, tc.g, tc.b);
+    targetSwatch.style.backgroundImage = 'none';
+
+    // Score rating
+    scoreRatingEl.textContent = getScoreRating(score);
+    scoreRatingEl.className = 'score-rating ' + getScoreClass(score);
+
+    deltaEInfoEl.textContent = `ΔE (CIE76): ${dE.toFixed(1)}`;
+
+    // Animate score
+    animateScore(score);
+
+    transitionQuizPhase('result');
+  }
+
+  function animateScore(target) {
+    const duration = 800;
+    const start = performance.now();
+
+    scoreValueEl.className = 'score-value ' + getScoreClass(target);
+
+    function update(now) {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = Math.round(eased * target);
+      scoreValueEl.textContent = current;
+      if (progress < 1) requestAnimationFrame(update);
+    }
+
+    requestAnimationFrame(update);
+  }
+
+  function resetQuiz() {
+    state.targetColor = null;
+    state.quizPhase = 'idle';
+    hidePickMarker();
+    hideOverlayMsg();
+    transitionQuizPhase('idle');
+
+    // Reset target swatch styles
+    quizTargetSwatch.style.backgroundImage = 'none';
+    targetSwatch.style.backgroundImage = 'none';
+  }
+
+  function updateStatsDisplay() {
+    statCount.textContent = quizStats.total;
+    statAvg.textContent = quizStats.total > 0 ? quizStats.avg + '点' : '-';
+    statBest.textContent = quizStats.best > 0 ? quizStats.best + '点' : '-';
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Overlay Messages
+     ────────────────────────────────────────────────────────────── */
+
+  let overlayTimeout = null;
+
+  function showOverlayMsg(msg) {
+    quizOverlayMsg.textContent = msg;
+    quizOverlayMsg.classList.add('visible');
+
+    clearTimeout(overlayTimeout);
+    overlayTimeout = setTimeout(() => {
+      quizOverlayMsg.classList.remove('visible');
+    }, 3000);
+  }
+
+  function hideOverlayMsg() {
+    clearTimeout(overlayTimeout);
+    quizOverlayMsg.classList.remove('visible');
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Toast
+     ────────────────────────────────────────────────────────────── */
+
+  let toastTimeout = null;
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Clipboard
+     ────────────────────────────────────────────────────────────── */
+
+  async function copyToClipboard(text, btnElement) {
+    try {
+      await navigator.clipboard.writeText(text);
+      btnElement.classList.add('copied');
+      btnElement.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+        OK
+      `;
+      showToast('📋 クリップボードにコピーしました');
+      setTimeout(() => {
+        btnElement.classList.remove('copied');
+        btnElement.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2"/>
+            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+          </svg>
+          Copy
+        `;
+      }, 1500);
+    } catch (err) {
+      showToast('⚠️ コピーに失敗しました');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Event Binding & Initialization
+     ────────────────────────────────────────────────────────────── */
+
+  function init() {
+    // Build hue wheel cache
+    buildHueWheel();
+
+    // Build color values UI
+    buildColorValuesUI();
+
+    // Initial render
+    renderPicker();
+    updateColorDisplay();
+
+    // ── File Input ──
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        loadImage(e.target.files[0]);
+      }
+    });
+
+    // ── Drag & Drop ──
+    uploadDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadDropzone.classList.add('drag-over');
+    });
+
+    uploadDropzone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadDropzone.classList.remove('drag-over');
+    });
+
+    uploadDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      uploadDropzone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) {
+        loadImage(e.dataTransfer.files[0]);
+      }
+    });
+
+    // Also allow drag & drop on the whole image panel
+    const imagePanel = document.querySelector('.image-panel');
+    imagePanel.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    imagePanel.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length > 0) {
+        loadImage(e.dataTransfer.files[0]);
+      }
+    });
+
+    // ── Change Image Button ──
+    $('btn-change-image').addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    // ── Image Click & Hover ──
+    displayImg.addEventListener('click', onImageClick);
+    displayImg.addEventListener('mousemove', onImageMouseMove);
+    displayImg.addEventListener('mouseleave', () => {
+      statusCoords.textContent = '座標: -';
+      statusHex.textContent = '色: -';
+      statusSwatch.style.backgroundColor = 'transparent';
+    });
+
+    // ── Picker Canvas ──
+    pickerCanvas.addEventListener('mousedown', onPickerDown);
+    pickerCanvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      onPickerDown(e);
+    }, { passive: false });
+
+    document.addEventListener('mousemove', onDocMove);
+    document.addEventListener('touchmove', (e) => {
+      if (state.dragTarget) {
+        e.preventDefault();
+        onDocMove(e);
+      }
+    }, { passive: false });
+
+    document.addEventListener('mouseup', onDocUp);
+    document.addEventListener('touchend', onDocUp);
+
+    // ── Copy Buttons ──
+    colorValuesContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('.copy-btn');
+      if (!btn) return;
+      const id = btn.dataset.copyId;
+      const text = getCopyText(id);
+      copyToClipboard(text, btn);
+    });
+
+    // ── Mode Tabs ──
+    btnModePicker.addEventListener('click', () => setAppMode('picker'));
+    btnModeQuiz.addEventListener('click', () => setAppMode('quiz'));
+
+    // ── Quiz Mode Tabs ──
+    btnQuizA.addEventListener('click', () => setQuizMode('A'));
+    btnQuizB.addEventListener('click', () => setQuizMode('B'));
+
+    // ── Quiz Buttons ──
+    btnQuizStart.addEventListener('click', startQuiz);
+    btnQuizAnswer.addEventListener('click', submitAnswer);
+    btnQuizNext.addEventListener('click', () => {
+      resetQuiz();
+      startQuiz();
+    });
+
+    // ── Keyboard Shortcuts ──
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && state.appMode === 'quiz' && state.quizPhase === 'guessing') {
+        submitAnswer();
+      }
+      if (e.key === 'Escape' && state.appMode === 'quiz' && state.quizPhase !== 'idle') {
+        resetQuiz();
+      }
+    });
+  }
+
+  // ── Start ──
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+
+</body>
+</html>
